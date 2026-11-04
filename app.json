@@ -1,0 +1,12 @@
+{
+  "expo": {
+    "name": "Kindred",
+    "slug": "kindred",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "userInterfaceStyle": "light",
+    "ios": { "supportsTablet": true },
+    "android": { "package": "com.kindred.demo" },
+    "web": { "bundler": "metro" }
+  }
+}
