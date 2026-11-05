@@ -10,6 +10,8 @@ export type Request = {
   goal: number;
   raised: number;
   location: string;
+  country?: string;
+  currency?: string;
   attachment?: string;
 };
 export type Gift = {
@@ -17,6 +19,7 @@ export type Gift = {
   requestId: string;
   title: string;
   amount: number;
+  currency?: string;
   anonymous: boolean;
   message: string;
   date: string;
@@ -28,8 +31,28 @@ export const categories: Category[] = [
   "Medical",
   "Utilities",
 ];
-export const money = (amount: number) =>
-  "Rs. " + amount.toLocaleString("en-LK", { maximumFractionDigits: 2 });
+export const money = (amount: number, currency = "LKR") => {
+  const code = currency.toUpperCase();
+  try {
+    return new Intl.NumberFormat(undefined, {
+      style: "currency",
+      currency: code,
+      maximumFractionDigits: currencyFractionDigits(code),
+    }).format(amount);
+  } catch {
+    return `${code} ${amount.toLocaleString(undefined, { maximumFractionDigits: 2 })}`;
+  }
+};
+export const currencyFractionDigits = (currency: string) => {
+  try {
+    return new Intl.NumberFormat(undefined, {
+      style: "currency",
+      currency: currency.toUpperCase(),
+    }).resolvedOptions().maximumFractionDigits ?? 2;
+  } catch {
+    return 2;
+  }
+};
 export const initial: Data = {
   gifts: [],
   requests: [
@@ -44,6 +67,8 @@ export const initial: Data = {
       goal: 25000,
       raised: 16500,
       location: "Kandy",
+      country: "Sri Lanka",
+      currency: "LKR",
     },
     {
       id: "2",
@@ -56,6 +81,8 @@ export const initial: Data = {
       goal: 12000,
       raised: 4500,
       location: "Colombo",
+      country: "Sri Lanka",
+      currency: "LKR",
     },
     {
       id: "3",
@@ -68,6 +95,8 @@ export const initial: Data = {
       goal: 18000,
       raised: 7200,
       location: "Galle",
+      country: "Sri Lanka",
+      currency: "LKR",
     },
     {
       id: "4",
@@ -80,27 +109,52 @@ export const initial: Data = {
       goal: 15000,
       raised: 3000,
       location: "Colombo",
+      country: "Sri Lanka",
+      currency: "LKR",
     },
   ],
 };
-export function validateAmount(value: string, max = 10000000): number | null {
-  if (!/^\d+(\.\d{1,2})?$/.test(value.trim())) return null;
+export function validateAmount(
+  value: string,
+  max = 10000000,
+  fractionDigits = 2,
+): number | null {
+  if (
+    !Number.isFinite(max) ||
+    !Number.isInteger(fractionDigits) ||
+    fractionDigits < 0
+  )
+    return null;
+  const decimals = fractionDigits
+    ? `(?:\\.\\d{1,${fractionDigits}})?`
+    : "";
+  if (!new RegExp(`^\\d+${decimals}$`).test(value.trim())) return null;
   const n = Number(value);
   return Number.isFinite(n) && n > 0 && n <= max ? n : null;
 }
 export function addGift(data: Data, gift: Gift): Data {
   const req = data.requests.find((r) => r.id === gift.requestId);
+  const precision = currencyFractionDigits(
+    req?.currency ?? gift.currency ?? "LKR",
+  );
+  const scale = 10 ** precision;
+  const round = (value: number) => Math.round(value * scale) / scale;
   if (
     !req ||
     req.owner === "me" ||
+    typeof gift.amount !== "number" ||
+    !Number.isFinite(gift.amount) ||
     gift.amount <= 0 ||
-    gift.amount > Math.round((req.goal - req.raised) * 100) / 100
+    round(gift.amount) !== gift.amount ||
+    (gift.currency &&
+      gift.currency.toUpperCase() !== (req.currency ?? "LKR").toUpperCase()) ||
+    gift.amount > round(req.goal - req.raised)
   )
     throw new Error("Gift amount is not valid for this request.");
   return {
     requests: data.requests.map((r) =>
       r.id === req.id
-        ? { ...r, raised: Math.round((r.raised + gift.amount) * 100) / 100 }
+        ? { ...r, raised: round(r.raised + gift.amount) }
         : r,
     ),
     gifts: [gift, ...data.gifts],

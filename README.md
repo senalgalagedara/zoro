@@ -1,6 +1,6 @@
-# Kindred — Expo mobile frontend
+# ZORO — Expo mobile frontend
 
-A React Native + TypeScript app for two roles: people seeking help with bills or expenses, and people offering voluntary monetary gifts. Working brand: Kindred. Currency: LKR.
+A React Native + TypeScript app for people seeking help with bills or expenses and people offering voluntary gifts. Brand: ZORO. The demo supports country and currency labels per request; all seeded examples use LKR.
 
 ## Run
 
@@ -19,8 +19,9 @@ Use an Expo Go version compatible with SDK 55, or an SDK 55 development build, t
 - Giver discovery feed with category filters and search.
 - Request details, story, amount raised, goal and progress.
 - Requester dashboard and request creation with validation.
+- Country and three-letter currency code on requests, with per-currency display and precision.
 - Native PDF/image picker, optional bill filename, removal and 10 MB limit.
-- Demo gift confirmation, custom/preset amounts, anonymous option and message.
+- Demo gift confirmation, custom amounts, anonymous option and message.
 - Gift activity, funding status, profiles and role switching.
 - AsyncStorage persistence on the current device.
 - Responsive layout, safe areas and keyboard handling.
@@ -54,4 +55,4 @@ npx expo export --platform all
 
 Connect authentication and server-enforced requester/giver permissions; persist requests and gifts in a backend; implement private bill uploads and review; connect a payment provider available in the intended country, recipient onboarding and payouts; verify payment success via server webhooks before changing funding totals; add reporting and moderation. Never use local state or this demo's confirm button to authorize real transfers.
 
-This is a frontend prototype: it does not collect payment credentials, charge money, verify identities or bills, or make payouts.
+This is a frontend prototype: it does not collect payment credentials, charge money, verify identities or bills, or make payouts. Country and currency fields are informational only; they do not enable real transactions, foreign-exchange conversion, or country eligibility checks.

@@ -1,7 +1,7 @@
 {
-  "name": "kindred",
+  "name": "zoro",
   "version": "1.0.0",
-  "description": "Kindred gifting and expense support mobile frontend",
+  "description": "ZORO gifting and expense support mobile frontend",
   "main": "index.ts",
   "scripts": {
     "test": "node --experimental-strip-types --test src/model.test.ts",

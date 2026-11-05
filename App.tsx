@@ -25,6 +25,7 @@ import {
   categories,
   initial,
   money,
+  currencyFractionDigits,
   validateAmount,
   addGift,
 } from "./src/model";
@@ -128,7 +129,7 @@ function Progress({ request: r }: { request: Request }) {
       <View style={s.between}>
         <Text style={s.small}>
           <Text style={{ fontWeight: "700", color: green }}>
-            {money(r.raised)}
+            {money(r.raised, r.currency ?? "LKR")}
           </Text>{" "}
           raised
         </Text>
@@ -159,6 +160,8 @@ function Main() {
     [story, setStory] = useState(""),
     [goal, setGoal] = useState(""),
     [location, setLocation] = useState(""),
+    [country, setCountry] = useState("Sri Lanka"),
+    [currency, setCurrency] = useState("LKR"),
     [kind, setKind] = useState<Category>("Essentials"),
     [attachment, setAttachment] = useState("");
   const [amount, setAmount] = useState("1000"),
@@ -193,12 +196,11 @@ function Main() {
   }, [data, ready]);
   const request = data.requests.find((r) => r.id === selected);
   const mine = data.requests.filter((r) => r.owner === "me");
-  const total = data.gifts.reduce((sum, g) => sum + g.amount, 0);
   const visible = data.requests.filter(
     (r) =>
       (role === "requester" ? r.owner === "me" : r.owner !== "me") &&
       (category === "All" || r.category === category) &&
-      `${r.title} ${r.name} ${r.location}`
+      `${r.title} ${r.name} ${r.location} ${r.country ?? "Sri Lanka"}`
         .toLowerCase()
         .includes(query.toLowerCase()),
   );
@@ -211,15 +213,22 @@ function Main() {
     setNotice("");
   }
   function create() {
-    const n = validateAmount(goal);
+    const normalizedCurrency = currency.trim().toUpperCase();
+    const n = validateAmount(
+      goal,
+      10000000,
+      currencyFractionDigits(normalizedCurrency),
+    );
     if (
       title.trim().length < 5 ||
       story.trim().length < 20 ||
       !n ||
-      !location.trim()
+      !location.trim() ||
+      !country.trim() ||
+      !/^[A-Z]{3}$/.test(normalizedCurrency)
     ) {
       setError(
-        "Add a title (5+ characters), story (20+ characters), location and valid amount up to Rs. 10,000,000.",
+        "Add a title, story, city or area, country, a 3-letter currency code, and a valid goal amount.",
       );
       return;
     }
@@ -233,6 +242,8 @@ function Main() {
       raised: 0,
       category: kind,
       location: location.trim(),
+      country: country.trim(),
+      currency: normalizedCurrency,
       attachment,
     };
     setData((d) => ({ ...d, requests: [r, ...d.requests] }));
@@ -242,19 +253,25 @@ function Main() {
     setStory("");
     setGoal("");
     setLocation("");
+    setCountry("Sri Lanka");
+    setCurrency("LKR");
     setAttachment("");
     setError("");
     setNotice("Your request has been added to this device’s demo.");
   }
   function give() {
     if (giving.current || !request) return;
+    const precision = currencyFractionDigits(request.currency ?? "LKR");
+    const scale = 10 ** precision;
+    const remaining = Math.round((request.goal - request.raised) * scale) / scale;
     const n = validateAmount(
       amount,
-      Math.round((request.goal - request.raised) * 100) / 100,
+      remaining,
+      precision,
     );
     if (!n) {
       setError(
-        "Enter a positive amount no greater than the remaining goal, with up to 2 decimal places.",
+        `Enter a positive amount no greater than the remaining goal, with up to ${precision} decimal places.`,
       );
       return;
     }
@@ -265,6 +282,7 @@ function Main() {
         requestId: request.id,
         title: request.title,
         amount: n,
+        currency: request.currency ?? "LKR",
         anonymous,
         message: message.trim(),
         date: new Date().toISOString(),
@@ -285,11 +303,20 @@ function Main() {
         copyToCacheDirectory: true,
       });
       if (!result.canceled) {
-        if ((result.assets[0].size ?? 0) > 10 * 1024 * 1024) {
-          setError("Choose a file smaller than 10 MB.");
+        const asset = result.assets[0];
+        if (typeof asset.size !== "number" || !Number.isFinite(asset.size)) {
+          setError("Could not verify the file size. Please choose another file.");
           return;
         }
-        setAttachment(result.assets[0].name);
+        if (asset.size <= 0) {
+          setError("The selected file is empty. Please choose another file.");
+          return;
+        }
+        if (asset.size > 10 * 1024 * 1024) {
+          setError("Choose a file that is 10 MB or smaller.");
+          return;
+        }
+        setAttachment(asset.name);
         setError("");
       }
     } catch {
@@ -316,7 +343,7 @@ function Main() {
               <Icon name="heart" color="white" size={23} />
             </View>
             <Text style={s.brand}>
-              kindred<Text style={{ color: "#B89955" }}>.</Text>
+              ZORO<Text style={{ color: "#B89955" }}>.</Text>
             </Text>
           </View>
           <View style={s.pill}>
@@ -343,6 +370,12 @@ function Main() {
               A caring community for life’s everyday needs. Give a little
               support, or find a helping hand.
             </Text>
+            <View style={s.notice}>
+              <Text style={s.small}>
+                ZORO is being designed for a global community. This demo does not
+                process real payments; live support will depend on country.
+              </Text>
+            </View>
             <Text style={[s.h2, { marginTop: 22 }]}>
               How would you like to begin?
             </Text>
@@ -412,11 +445,14 @@ function Main() {
                   </View>
                   <Text style={s.heroTitle}>{request.title}</Text>
                   <Text style={s.body}>
-                    By {request.name} · {request.location}
+                    By {request.name} · {request.location},{" "}
+                    {request.country ?? "Sri Lanka"}
                   </Text>
                   <View style={s.card}>
                     <Progress request={request} />
-                    <Text style={s.body}>Goal: {money(request.goal)}</Text>
+                    <Text style={s.body}>
+                      Goal: {money(request.goal, request.currency ?? "LKR")}
+                    </Text>
                   </View>
                   <Text style={s.h2}>Their story</Text>
                   <Text style={s.body}>{request.story}</Text>
@@ -442,7 +478,9 @@ function Main() {
                       disabled={request.raised >= request.goal}
                       onPress={() => {
                         setAmount(
-                          String(Math.min(1000, request.goal - request.raised)),
+                          (request.currency ?? "LKR") === "LKR"
+                            ? String(Math.min(1000, request.goal - request.raised))
+                            : "",
                         );
                         setMessage("");
                         setAnonymous(false);
@@ -479,20 +517,16 @@ function Main() {
                     <View style={{ flex: 1, gap: 8 }}>
                       <Text style={s.impactLabel}>
                         {role === "giver"
-                          ? "YOUR KINDNESS, SO FAR"
-                          : "SUPPORT FOR YOUR REQUESTS"}
+                          ? "DEMO GIFTS RECORDED"
+                          : "YOUR REQUESTS"}
                       </Text>
                       <Text style={s.impactNumber}>
-                        {money(
-                          role === "giver"
-                            ? total
-                            : mine.reduce((n, r) => n + r.raised, 0),
-                        )}
+                        {role === "giver" ? data.gifts.length : mine.length}
                       </Text>
                       <Text style={s.impactBody}>
                         {role === "giver"
-                          ? `${data.gifts.length} demo gifts · Every little bit matters`
-                          : `${mine.length} requests · You’re not in this alone`}
+                          ? "Amounts stay in each request currency; no conversion is applied."
+                          : "Goals and support are shown in each request currency."}
                       </Text>
                     </View>
                     <Icon
@@ -595,13 +629,15 @@ function Main() {
                             <Text style={s.small}>{r.name.slice(0, 1)}</Text>
                           </View>
                           <Text style={s.small}>
-                            {r.name} · {r.location}
+                            {r.name} · {r.location}, {r.country ?? "Sri Lanka"}
                           </Text>
                         </View>
                         <Text style={s.h3}>{r.title}</Text>
                         <Progress request={r} />
                         <View style={s.between}>
-                          <Text style={s.small}>of {money(r.goal)} goal</Text>
+                          <Text style={s.small}>
+                            of {money(r.goal, r.currency ?? "LKR")} goal
+                          </Text>
                           <Text style={s.link}>
                             {r.raised >= r.goal
                               ? "Fully funded ✓"
@@ -631,7 +667,15 @@ function Main() {
                         <View key={g.id} style={s.card}>
                           <View style={s.between}>
                             <Icon name="gift" />
-                            <Text style={s.link}>{money(g.amount)}</Text>
+                            <Text style={s.link}>
+                              {money(
+                                g.amount,
+                                g.currency ??
+                                  data.requests.find((r) => r.id === g.requestId)
+                                    ?.currency ??
+                                  "LKR",
+                              )}
+                            </Text>
                           </View>
                           <Text style={s.h3}>{g.title}</Text>
                           <Text style={s.small}>
@@ -666,7 +710,7 @@ function Main() {
                           {r.raised >= r.goal
                             ? "Goal reached"
                             : "Open for support"}{" "}
-                          · Goal {money(r.goal)}
+                          · Goal {money(r.goal, r.currency ?? "LKR")}
                         </Text>
                       </View>
                     ))
@@ -674,7 +718,7 @@ function Main() {
                 </>
               ) : (
                 <>
-                  <Text style={s.eyebrow}>YOUR CORNER OF KINDRED</Text>
+                  <Text style={s.eyebrow}>YOUR CORNER OF ZORO</Text>
                   <Text style={s.heroTitle}>Hello, kind human.</Text>
                   <View style={s.card}>
                     <View style={s.row}>
@@ -828,17 +872,29 @@ function Main() {
                     ))}
                   </View>
                   <Field
-                    label="Amount needed (LKR)"
+                    label={`Amount needed (${currency.trim().toUpperCase() || "currency"})`}
                     value={goal}
                     onChangeText={setGoal}
                     numeric
-                    placeholder="15000"
+                    placeholder="Enter an amount"
+                  />
+                  <Field
+                    label="Currency code (3 letters)"
+                    value={currency}
+                    onChangeText={(value) => setCurrency(value.toUpperCase().slice(0, 3))}
+                    placeholder="LKR, USD, EUR"
                   />
                   <Field
                     label="City or area"
                     value={location}
                     onChangeText={setLocation}
-                    placeholder="Colombo"
+                    placeholder="e.g. Colombo"
+                  />
+                  <Field
+                    label="Country"
+                    value={country}
+                    onChangeText={setCountry}
+                    placeholder="e.g. Sri Lanka"
                   />
                   <Field
                     label="Your story"
@@ -884,7 +940,7 @@ function Main() {
                     Kindness looks{"\n"}good on you.
                   </Text>
                   <Text style={s.body}>
-                    Your demo gift of {money(Number(amount))} has been added to{" "}
+                    Your demo gift of {money(Number(amount), request?.currency ?? "LKR")} has been added to{" "}
                     {request?.name}’s request.
                   </Text>
                   <Text style={s.small}>
@@ -912,36 +968,23 @@ function Main() {
                       Demo only — no payment details or real charges.
                     </Text>
                   </View>
-                  <Text style={s.label}>Choose your gift (LKR)</Text>
-                  <View style={s.wrap}>
-                    {[500, 1000, 2500, 5000].map((n) => (
-                      <Pressable
-                        accessibilityRole="button"
-                        key={n}
-                        onPress={() => setAmount(String(n))}
-                        style={[s.chip, amount === String(n) && s.chipActive]}
-                      >
-                        <Text
-                          style={[
-                            s.chipText,
-                            amount === String(n) && { color: "white" },
-                          ]}
-                        >
-                          {money(n)}
-                        </Text>
-                      </Pressable>
-                    ))}
-                  </View>
+                  <Text style={s.label}>
+                    Enter a gift in {request?.currency ?? "LKR"}
+                  </Text>
                   <Field
-                    label="Gift amount (LKR)"
+                    label={`Gift amount (${request?.currency ?? "LKR"})`}
                     value={amount}
                     onChangeText={setAmount}
                     numeric
+                    placeholder="Enter an amount"
                   />
                   <Text style={s.small}>
                     Remaining need:{" "}
                     {money(
-                      request ? Math.max(0, request.goal - request.raised) : 0,
+                      request
+                        ? Math.max(0, request.goal - request.raised)
+                        : 0,
+                      request?.currency ?? "LKR",
                     )}
                   </Text>
                   <Field
